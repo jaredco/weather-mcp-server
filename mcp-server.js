@@ -84,7 +84,7 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async ({ tool, parameters }, 
 // 🔁 MCP-compliant request routing via Express
 app.post('/', async (req, res) => {
   try {
-    const result = await mcpServer.handle(req.body, req); // ✅ This works fine
+    const result = await mcpServer.receive(req.body, req); // ✅ correct method
     res.json(result);
   } catch (err) {
     console.error('❌ MCP server error:', err);
