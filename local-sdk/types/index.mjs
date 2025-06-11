@@ -1,5 +1,5 @@
-export const CallToolRequestSchema = 'call_tool';
-export const ListToolsRequestSchema = 'list_tools';
+export const CallToolRequestSchema = 'call-tool';
+export const ListToolsRequestSchema = 'list-tools';
 
 export class McpError extends Error {
   constructor(code, message) {
