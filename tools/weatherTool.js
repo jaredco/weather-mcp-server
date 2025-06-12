@@ -1,5 +1,7 @@
 import fetch from 'node-fetch';
 import { McpError, ErrorCode } from '../local-sdk/types/index.mjs';
+import { logToolUsage } from '../utils/logger.js';
+
 
 // ✅ Inline Tool class
 class Tool {
@@ -13,6 +15,7 @@ class Tool {
 }
 
  
+
 import dotenv from 'dotenv'; 
 
 dotenv.config();
@@ -190,6 +193,8 @@ export const weatherTool = new Tool({
 
   run: async (input) => {
     console.log('[WeatherTool] Input:', input);
+
+    
   
     try {
       const result = await fetchWeatherData(input);

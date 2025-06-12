@@ -1,8 +1,10 @@
 import express from 'express';
 import { weatherTool } from './tools/weatherTool.js';
+import { logToolUsage } from './utils/logger.js';
 
 const app = express();
 app.use(express.json());
+
 
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -66,6 +68,13 @@ app.post('/', async (req, res) => {
 
             const result = await weatherTool.run(body.params.arguments);
             
+            // Log usage
+            logToolUsage({
+              tool: 'weatherTool',
+              input: body.params.arguments,
+              output: result,
+              req
+            });
             const cleanOutput = Object.fromEntries(
               Object.entries(result).filter(([_, v]) => v !== null)
             );
@@ -86,6 +95,13 @@ app.post('/', async (req, res) => {
               }
             });
           } catch (error) {
+            logToolUsage({
+              tool: 'weatherTool',
+              input: body.params.arguments,
+              error,
+              req
+            });
+
             res.json({
               jsonrpc: '2.0',
               id: body.id,
@@ -129,10 +145,19 @@ app.post('/', async (req, res) => {
     
     const result = await weatherTool.run(parameters);
 
+    logToolUsage({
+      tool: 'weatherTool',
+      input: parameters,
+      output: result,
+      req
+    });
+  
+
     const cleanOutput = Object.fromEntries(
       Object.entries(result).filter(([_, v]) => v !== null)
     );
 
+    
 
     console.log('🌦 Weather result:', cleanOutput);
     res.json(cleanOutput);
