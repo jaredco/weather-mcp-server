@@ -1,0 +1,109 @@
+openapi: 3.0.0
+info:
+  title: WeatherTool API
+  version: 1.0.0
+  description: |
+    Provides current weather, forecasts, and timing for rain/sun events
+    based on location, date, and other query parameters. This API is
+    MCP-compatible and supports LLM agents via OpenAPI spec.
+
+servers:
+  - url: https://mcp-weathertrax.jaredco.com
+
+paths:
+  /:
+    post:
+      summary: Call the weatherTool to get weather data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: City name, ZIP/postal code, or place name
+                query_type:
+                  type: string
+                  enum: [current, forecast, multi_day, sunrise_sunset, rain_check]
+                  description: Type of weather query
+                date:
+                  type: string
+                  format: date
+                  description: Required for query types like forecast or rain_check
+                num_days:
+                  type: integer
+                  minimum: 1
+                  maximum: 14
+                  description: Only used with multi_day
+              required:
+                - location
+                - query_type
+      responses:
+        '200':
+          description: WeatherTool result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: string
+                  temp_high:
+                    type: number
+                  temp_low:
+                    type: number
+                  condition:
+                    type: string
+                  wind:
+                    type: string
+                  feels_like:
+                    type: number
+                  humidity:
+                    type: number
+                  uv_index:
+                    type: number
+                  visibility:
+                    type: number
+                  pressure:
+                    type: number
+                  cloud_cover:
+                    type: number
+                  dew_point:
+                    type: number
+                    nullable: true
+                  sunrise:
+                    type: string
+                  sunset:
+                    type: string
+                  forecast:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        day:
+                          type: string
+                        high:
+                          type: number
+                        low:
+                          type: number
+                        condition:
+                          type: string
+                  will_rain:
+                    type: boolean
+                  rain_start:
+                    type: string
+                  rain_end:
+                    type: string
+                  units:
+                    type: object
+                    properties:
+                      temperature:
+                        type: string
+                      distance:
+                        type: string
+                      speed:
+                        type: string
+                      pressure:
+                        type: string
