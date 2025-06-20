@@ -17,7 +17,7 @@ export class Server {
       return await handler(request, context);
     }
 
-    if (request.type === 'call_tool') {
+    if (request.type === 'call-tool') {
       const tool = this.capabilities.tools[request.tool_id];
       if (!tool) {
         throw new Error(`Tool not found: ${request.tool_id}`);

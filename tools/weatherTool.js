@@ -1,9 +1,10 @@
 import fetch from 'node-fetch';
 import { McpError, ErrorCode } from '../local-sdk/types/index.mjs';
 import { logToolUsage } from '../utils/logger.js';
+import dotenv from 'dotenv';
 
+dotenv.config();
 
-// ✅ Inline Tool class
 class Tool {
   constructor({ name, description, inputSchema, outputSchema, run }) {
     this.name = name;
@@ -14,11 +15,25 @@ class Tool {
   }
 }
 
- 
-
-import dotenv from 'dotenv'; 
-
-dotenv.config();
+// 🔁 Retry wrapper
+async function fetchWithRetry(url, retries = 1, delay = 1000) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(url);
+      const text = await response.text();
+      console.log("[WeatherTool] Raw response:", text.slice(0, 300));
+      const data = JSON.parse(text);
+      return data;
+    } catch (err) {
+      console.warn(`[WeatherTool] Attempt ${attempt + 1} failed: ${err.message}`);
+      if (attempt < retries) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        throw new McpError(ErrorCode.SERVER_ERROR, 'Failed to fetch weather data (invalid JSON or bad URL)');
+      }
+    }
+  }
+}
 
 async function fetchWeatherData({ location, date, query_type, num_days = 3 }) {
   const apiKey = process.env.WEATHER_API_KEY;
@@ -37,8 +52,9 @@ async function fetchWeatherData({ location, date, query_type, num_days = 3 }) {
   });
 
   const url = `${endpoint}?${params.toString()}`;
-  const response = await fetch(url);
-  const data = await response.json();
+  console.log("[WeatherTool] Fetching URL:", url);
+
+  const data = await fetchWithRetry(url);
 
   if (!data || !data.data) {
     throw new McpError(ErrorCode.SERVER_ERROR, 'Weather API error: Malformed response');
@@ -94,21 +110,18 @@ async function fetchWeatherData({ location, date, query_type, num_days = 3 }) {
         pressure: parseFloat(current.pressure),
         cloud_cover: parseInt(current.cloudcover),
         dew_point: current.DewPointF ? parseFloat(current.DewPointF) : null,
-      
-      units: {
+        units: {
           temperature: "°F",
           distance: "miles",
           speed: "mph",
           pressure: "mb"
         }
-
       };
 
     default:
       throw new McpError(ErrorCode.BAD_REQUEST, `Unsupported query_type: ${query_type}`);
   }
 }
-
 
 export const weatherTool = new Tool({
   name: 'weatherTool',
@@ -144,14 +157,13 @@ export const weatherTool = new Tool({
   outputSchema: {
     type: 'object',
     properties: {
-      
       feels_like: { type: 'number', description: 'Feels like temperature in °F' },
       humidity: { type: 'number', description: 'Humidity %' },
       uv_index: { type: 'number', description: 'UV index level' },
       visibility: { type: 'number', description: 'Visibility in miles' },
       pressure: { type: 'number', description: 'Atmospheric pressure (mb)' },
       cloud_cover: { type: 'number', description: 'Cloud cover %' },
-      dew_point: { type:  ['number', 'null'], description: 'Dew point in °F' },
+      dew_point: { type: ['number', 'null'], description: 'Dew point in °F' },
       moonrise: { type: 'string', description: 'Time of moonrise' },
       moonset: { type: 'string', description: 'Time of moonset' },
       moon_phase: { type: 'string', description: 'Phase of the moon' },
@@ -182,10 +194,10 @@ export const weatherTool = new Tool({
         type: 'object',
         description: 'Units used in the returned weather data',
         properties: {
-          temperature: { type: 'string', description: 'Temperature unit (e.g., °F, °C)' },
-          distance: { type: 'string', description: 'Distance unit (e.g., miles, km)' },
-          speed: { type: 'string', description: 'Speed unit (e.g., mph, km/h)' },
-          pressure: { type: 'string', description: 'Pressure unit (e.g., mb, hPa)' }
+          temperature: { type: 'string' },
+          distance: { type: 'string' },
+          speed: { type: 'string' },
+          pressure: { type: 'string' }
         }
       }
     }
@@ -193,12 +205,9 @@ export const weatherTool = new Tool({
 
   run: async (input) => {
     console.log('[WeatherTool] Input:', input);
-
-    
-  
     try {
       const result = await fetchWeatherData(input);
-      console.log('[WeatherTool] Result:', result); // ✅ add this
+      console.log('[WeatherTool] Result:', result);
       return result;
     } catch (err) {
       console.error('[WeatherTool] Error during fetch:', err);
