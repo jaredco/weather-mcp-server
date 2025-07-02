@@ -15,7 +15,6 @@ class Tool {
   }
 }
 
-// 🔁 Retry wrapper
 async function fetchWithRetry(url, retries = 1, delay = 1000) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -36,6 +35,10 @@ async function fetchWithRetry(url, retries = 1, delay = 1000) {
 }
 
 async function fetchWeatherData({ location, date, query_type, num_days = 3 }) {
+  if (!location || !query_type) {
+    throw new McpError(ErrorCode.BAD_REQUEST, 'Missing required parameter: location or query_type');
+  }
+
   const apiKey = process.env.WEATHER_API_KEY;
   if (!apiKey) throw new McpError(ErrorCode.SERVER_ERROR, 'Missing API key');
 
@@ -118,6 +121,26 @@ async function fetchWeatherData({ location, date, query_type, num_days = 3 }) {
         }
       };
 
+    case 'sunrise_sunset':
+      const astronomy = dayData?.[0]?.astronomy?.[0];
+      if (!astronomy) throw new McpError(ErrorCode.BAD_REQUEST, 'No astronomy data available');
+      return {
+        sunrise: astronomy.sunrise,
+        sunset: astronomy.sunset,
+        moonrise: astronomy.moonrise,
+        moonset: astronomy.moonset,
+        moon_phase: astronomy.moon_phase
+      };
+
+    case 'rain_check':
+      const rainWindow = dayData[0].hourly.find(h => parseInt(h.chanceofrain) > 50);
+      return {
+        will_rain: !!rainWindow,
+        rain_start: rainWindow ? rainWindow.time : null,
+        rain_end: rainWindow ? `${parseInt(rainWindow.time) + 100}` : null,
+        precip_chance: rainWindow ? parseFloat(rainWindow.chanceofrain) / 100 : 0
+      };
+
     default:
       throw new McpError(ErrorCode.BAD_REQUEST, `Unsupported query_type: ${query_type}`);
   }
@@ -125,8 +148,7 @@ async function fetchWeatherData({ location, date, query_type, num_days = 3 }) {
 
 export const weatherTool = new Tool({
   name: 'weatherTool',
-  description: 'Provides current weather, forecasts, and timing for rain or sun events based on location and date. Choose a query type to get either the current weather, a multi-day forecast, a single-day forecast, or check for sunrise/sunset or rain windows.',
-
+  description: 'Provides current weather, forecasts, and timing for rain or sun events based on location and date.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -137,36 +159,35 @@ export const weatherTool = new Tool({
       date: {
         type: 'string',
         format: 'date',
-        description: 'Target date (YYYY-MM-DD). Required for query types: "forecast", "sunrise_sunset", or "rain_check"'
+        description: 'Target date (YYYY-MM-DD). Required for some query types.'
       },
       query_type: {
         type: 'string',
         enum: ['current', 'forecast', 'multi_day', 'sunrise_sunset', 'rain_check'],
-        description: 'Type of weather query. "current" for now, "multi_day" for several days, "sunrise_sunset" for timing, etc.'
+        description: 'Type of weather query.'
       },
       num_days: {
         type: 'integer',
         minimum: 1,
         maximum: 14,
-        description: 'Number of days to return (only used with "multi_day")'
+        description: 'Number of days (only used with "multi_day")'
       }
     },
     required: ['location', 'query_type']
   },
-
   outputSchema: {
     type: 'object',
     properties: {
-      feels_like: { type: 'number', description: 'Feels like temperature in °F' },
-      humidity: { type: 'number', description: 'Humidity %' },
-      uv_index: { type: 'number', description: 'UV index level' },
-      visibility: { type: 'number', description: 'Visibility in miles' },
-      pressure: { type: 'number', description: 'Atmospheric pressure (mb)' },
-      cloud_cover: { type: 'number', description: 'Cloud cover %' },
-      dew_point: { type: ['number', 'null'], description: 'Dew point in °F' },
-      moonrise: { type: 'string', description: 'Time of moonrise' },
-      moonset: { type: 'string', description: 'Time of moonset' },
-      moon_phase: { type: 'string', description: 'Phase of the moon' },
+      feels_like: { type: 'number' },
+      humidity: { type: 'number' },
+      uv_index: { type: 'number' },
+      visibility: { type: 'number' },
+      pressure: { type: 'number' },
+      cloud_cover: { type: 'number' },
+      dew_point: { type: ['number', 'null'] },
+      moonrise: { type: 'string' },
+      moonset: { type: 'string' },
+      moon_phase: { type: 'string' },
       summary: { type: 'string' },
       temp_high: { type: 'number' },
       temp_low: { type: 'number' },
@@ -180,7 +201,7 @@ export const weatherTool = new Tool({
         items: {
           type: 'object',
           properties: {
-            day: { type: 'string' },
+            date: { type: 'string' },
             high: { type: 'number' },
             low: { type: 'number' },
             condition: { type: 'string' }
@@ -192,7 +213,6 @@ export const weatherTool = new Tool({
       rain_end: { type: 'string' },
       units: {
         type: 'object',
-        description: 'Units used in the returned weather data',
         properties: {
           temperature: { type: 'string' },
           distance: { type: 'string' },
@@ -202,7 +222,6 @@ export const weatherTool = new Tool({
       }
     }
   },
-
   run: async (input) => {
     console.log('[WeatherTool] Input:', input);
     try {
@@ -210,7 +229,7 @@ export const weatherTool = new Tool({
       console.log('[WeatherTool] Result:', result);
       return result;
     } catch (err) {
-      console.error('[WeatherTool] Error during fetch:', err);
+      console.error(`[WeatherTool] Error for query_type "${input.query_type}":`, err);
       throw new Error('Failed to fetch weather data.');
     }
   }
