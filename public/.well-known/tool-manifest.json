@@ -1,82 +1,105 @@
 {
-    "tools": [
-      {
-        "name": "weatherTool",
-        "description": "Provides current weather, forecasts, and timing for rain/sun events based on location and date.",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "location": {
-              "type": "string",
-              "description": "City name or ZIP/postal code"
-            },
-            "date": {
-              "type": "string",
-              "format": "date",
-              "description": "Target date (YYYY-MM-DD). Required for 'forecast', 'sunrise_sunset', or 'rain_check'"
-            },
-            "query_type": {
-              "type": "string",
-              "enum": ["current", "forecast", "multi_day", "sunrise_sunset", "rain_check"],
-              "description": "The type of weather query to run"
-            },
-            "num_days": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 14,
-              "description": "Number of days to return (only used with 'multi_day')"
+  "name": "weathertrax",
+  "version": "1.0.0",
+  "description": "Fast current conditions and multi‑day forecasts by city or lat/long. Token‑frugal JSON with clear, structured errors.",
+  "homepage_url": "https://github.com/jaredco-ai/weathertrax-mcp-agent-demo",
+  "legal": {
+    "privacy_policy_url": "https://github.com/jaredco-ai/weathertrax-mcp-agent-demo/blob/main/PRIVACY.md"
+  },
+  "contact": {
+    "support_url": "https://github.com/jaredco-ai/weathertrax-mcp-agent-demo/issues"
+  },
+  "transport": {
+    "http": { "streaming": true }
+  },
+  "tools": [
+    {
+      "name": "weatherTool",
+      "title": "WeatherTrax",
+      "description": "Current weather, forecasts (1–14 days), sunrise/sunset, and rain timing.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "City, 'city, state', ZIP/postal, or 'lat,long' (e.g., '40.7128,-74.0060')."
+          },
+          "query_type": {
+            "type": "string",
+            "enum": ["current", "forecast", "multi_day", "sunrise_sunset", "rain_check"],
+            "description": "Type of query."
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "description": "Target date for forecast/sunrise_sunset/rain_check (YYYY-MM-DD)."
+          },
+          "num_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 14,
+            "description": "Number of days to return (multi_day only)."
+          }
+        },
+        "required": ["location", "query_type"]
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "summary": { "type": "string" },
+          "temperature_c": { "type": "number" },
+          "temperature_f": { "type": "number" },
+          "condition": { "type": "string" },
+          "wind_kph": { "type": "number" },
+          "wind_mph": { "type": "number" },
+          "precip_mm": { "type": "number" },
+          "precip_in": { "type": "number" },
+          "feels_like": { "type": "number" },
+          "humidity": { "type": "number" },
+          "uv_index": { "type": "number" },
+          "visibility_km": { "type": "number" },
+          "pressure_mb": { "type": "number" },
+          "cloud_cover": { "type": "number" },
+          "dew_point": { "type": "number" },
+          "observed_at": { "type": "string" },
+          "sunrise": { "type": "string" },
+          "sunset": { "type": "string" },
+          "moonrise": { "type": "string" },
+          "moonset": { "type": "string" },
+          "moon_phase": { "type": "string" },
+          "will_rain": { "type": "boolean" },
+          "rain_start": { "type": "string" },
+          "rain_end": { "type": "string" },
+          "forecast": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "day": { "type": "string" },
+                "high_c": { "type": "number" },
+                "low_c": { "type": "number" },
+                "high_f": { "type": "number" },
+                "low_f": { "type": "number" },
+                "condition": { "type": "string" }
+              }
             }
           },
-          "required": ["location", "query_type"]
-        },
-        "output": {
-          "type": "object",
-          "properties": {
-            "summary": { "type": "string" },
-            "temp_high": { "type": "number" },
-            "temp_low": { "type": "number" },
-            "precip_chance": { "type": "number" },
-            "condition": { "type": "string" },
-            "wind": { "type": "string" },
-            "sunrise": { "type": "string" },
-            "sunset": { "type": "string" },
-            "forecast": {
-              "type": "array",
-              "items": {
-                "type": "object",
-                "properties": {
-                  "day": { "type": "string" },
-                  "high": { "type": "number" },
-                  "low": { "type": "number" },
-                  "condition": { "type": "string" }
-                }
-              }
-            },
-            "feels_like": { "type": "number" },
-            "humidity": { "type": "number" },
-            "uv_index": { "type": "number" },
-            "visibility": { "type": "number" },
-            "pressure": { "type": "number" },
-            "cloud_cover": { "type": "number" },
-            "dew_point": { "type": "number" },
-            "moonrise": { "type": "string" },
-            "moonset": { "type": "string" },
-            "moon_phase": { "type": "string" },
-            "will_rain": { "type": "boolean" },
-            "rain_start": { "type": "string" },
-            "rain_end": { "type": "string" },
-            "units": {
-                "type": "object",
-                "description": "Units used in the returned weather data",
-                "properties": {
-                    "temperature": { "type": "string", "description": "Temperature unit (e.g., °F, °C)" },
-                    "distance": { "type": "string", "description": "Distance unit (e.g., miles, km)" },
-                    "speed": { "type": "string", "description": "Speed unit (e.g., mph, km/h)" },
-                    "pressure": { "type": "string", "description": "Pressure unit (e.g., mb, hPa)" }
-                }
-             }
+          "units": {
+            "type": "object",
+            "properties": {
+              "temperature": { "type": "string" },
+              "distance": { "type": "string" },
+              "speed": { "type": "string" },
+              "pressure": { "type": "string" }
+            }
           }
         }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "category": "Information",
+        "displayName": "WeatherTrax (Current & Forecast)"
       }
-    ]
-  }
+    }
+  ]
+}
