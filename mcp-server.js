@@ -8,6 +8,15 @@ import { logToolUsage } from './utils/logger.js';
 const app = express();
 app.use(express.json({ limit: '256kb' }));
 
+app.set('trust proxy', true);
+
+// prevent caches on API responses
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Server-Version', '1.0.0');
+  next();
+});
+
 /* ---------- CORS (broad for demos; tighten if needed) ---------- */
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*'); // allowlist in prod
@@ -208,6 +217,15 @@ app.post('/', async (req, res) => {
     console.error('Root direct-call error:', e);
     return resErr(res, 500, 'INTERNAL_ERROR', e?.message || 'Unexpected server error');
   }
+});
+
+app.get('/', (_req, res) => {
+  res.type('html').send(
+    `<h1>WeatherTrax MCP</h1>
+     <p>JSON‑RPC: POST /</p>
+     <p>Manifest: <a href="/.well-known/mcp/manifest">/.well-known/mcp/manifest</a></p>
+     <p>Docs: <a href="https://github.com/jaredco-ai/weathertrax-mcp-agent-demo">GitHub</a></p>`
+  );
 });
 
 /* ---------- Startup ---------- */
