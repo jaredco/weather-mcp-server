@@ -6,6 +6,11 @@ import { weatherTool } from './tools/weatherTool.js';
 import { logToolUsage } from './utils/logger.js';
 
 const app = express();
+
+import rateLimit from 'express-rate-limit';
+app.use(rateLimit({ windowMs: 60_000, max: 120 }));
+
+
 app.use(express.json({ limit: '256kb' }));
 
 app.set('trust proxy', true);
@@ -60,10 +65,17 @@ const manifest = {
   ]
 };
 
-/* ---------- Basic landing ---------- */
+ 
 app.get('/', (_req, res) => {
-  res.redirect('https://github.com/jaredco-ai/weathertrax-mcp-agent-demo');
+  res.type('html').send(
+    `<h1>WeatherTrax MCP</h1>
+     <p>JSON‑RPC: POST /</p>
+     <p>Manifest: <a href="/.well-known/mcp/manifest">/.well-known/mcp/manifest</a></p>
+     <p>Docs: <a href="https://github.com/jaredco-ai/weathertrax-mcp-agent-demo">GitHub</a></p>`
+  );
 });
+
+
 
 /* ---------- Healthcheck ---------- */
 app.get('/healthz', (_req, res) => {
@@ -219,14 +231,6 @@ app.post('/', async (req, res) => {
   }
 });
 
-app.get('/', (_req, res) => {
-  res.type('html').send(
-    `<h1>WeatherTrax MCP</h1>
-     <p>JSON‑RPC: POST /</p>
-     <p>Manifest: <a href="/.well-known/mcp/manifest">/.well-known/mcp/manifest</a></p>
-     <p>Docs: <a href="https://github.com/jaredco-ai/weathertrax-mcp-agent-demo">GitHub</a></p>`
-  );
-});
 
 /* ---------- Startup ---------- */
 const PORT = process.env.PORT || 3000;
