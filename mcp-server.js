@@ -3,6 +3,7 @@
 
 import express from 'express';
 import { weatherTool } from './tools/weatherTool.js';
+import { weatherPlanningTool } from './tools/weatherPlanningTool.js';
 import { logToolUsage } from './utils/logger.js';
 
 const app = express();
@@ -61,6 +62,14 @@ const manifest = {
       parameters: weatherTool.inputSchema, // keep schemas in one place
       output: weatherTool.outputSchema,
       annotations: { readOnlyHint: true, category: 'Information', displayName: 'WeatherTrax (Current & Forecast)' }
+    },
+    {
+      name: 'weatherPlanningTool',
+      title: 'WeatherTrax Planning',
+      description: 'Returns authoritative 7-day weather data for planning construction, outdoor work, or events.',
+      parameters: weatherPlanningTool.inputSchema,
+      output: weatherPlanningTool.outputSchema,
+      annotations: { readOnlyHint: true, category: 'Information', displayName: 'WeatherTrax (Planning)' }
     }
   ]
 };
@@ -119,6 +128,34 @@ app.post('/tools/weatherTool', async (req, res) => {
     return resErr(res, 500, 'INTERNAL_ERROR', e?.message || 'Unexpected server error');
   }
 });
+
+app.post('/tools/weatherPlanningTool', async (req, res) => {
+  try {
+    const body = req.body || {};
+    // Accept raw `{location, context, timeframe}` and common wrappers
+    let params = body;
+    if (body?.tool === 'weatherPlanningTool' || body?.tool_id === 'weatherPlanningTool') params = body.parameters || body.input;
+    if (body?.type === 'call-tool') params = body.input;
+
+    if (!params?.location) {
+      return resErr(res, 400, 'INVALID_INPUT', 'Missing required field: location',
+        "Provide 'location' (e.g., 'Boca Raton'). Optional: 'context', 'timeframe'.");
+    }
+
+    const result = await weatherPlanningTool.run(params);
+    const output = clean(result);
+
+    // Usage log (safe)
+    try {
+      logToolUsage?.({ tool: 'weatherPlanningTool', input: params, output, req });
+    } catch { /* ignore log failures */ }
+
+    return res.json(output);
+  } catch (e) {
+    console.error('Direct call error:', e);
+    return resErr(res, 500, 'INTERNAL_ERROR', e?.message || 'Unexpected server error');
+  }
+});
 /* ---------- MCP JSON‑RPC over HTTP + Direct fallback on ROOT ---------- */
 app.post('/', async (req, res) => {
   const body = req.body || {};
@@ -156,24 +193,37 @@ app.post('/', async (req, res) => {
           try {
             const toolName = body?.params?.tool || body?.params?.name;
             const args = body?.params?.arguments || {};
-            if (toolName !== 'weatherTool') {
+
+            let tool;
+            if (toolName === 'weatherTool') {
+              tool = weatherTool;
+              if (!args?.location || !args?.query_type) {
+                return res.json({
+                  jsonrpc: '2.0',
+                  id: body.id,
+                  error: { code: -32602, message: 'Missing required fields: location, query_type' }
+                });
+              }
+            } else if (toolName === 'weatherPlanningTool') {
+              tool = weatherPlanningTool;
+              if (!args?.location) {
+                return res.json({
+                  jsonrpc: '2.0',
+                  id: body.id,
+                  error: { code: -32602, message: 'Missing required field: location' }
+                });
+              }
+            } else {
               return res.json({
                 jsonrpc: '2.0',
                 id: body.id,
                 error: { code: -32601, message: `Tool not found: ${toolName}` }
               });
             }
-            if (!args?.location || !args?.query_type) {
-              return res.json({
-                jsonrpc: '2.0',
-                id: body.id,
-                error: { code: -32602, message: 'Missing required fields: location, query_type' }
-              });
-            }
 
-            const result = await weatherTool.run(args);
+            const result = await tool.run(args);
             const output = clean(result);
-            try { logToolUsage?.({ tool: 'weatherTool', input: args, output, req }); } catch {}
+            try { logToolUsage?.({ tool: toolName, input: args, output, req }); } catch {}
 
             return res.json({
               jsonrpc: '2.0',
@@ -182,7 +232,7 @@ app.post('/', async (req, res) => {
             });
           } catch (err) {
             console.error('[MCP tools/call] error:', err);
-            try { logToolUsage?.({ tool: 'weatherTool', input: body?.params?.arguments, error: err, req }); } catch {}
+            try { logToolUsage?.({ tool: body?.params?.tool || body?.params?.name, input: body?.params?.arguments, error: err, req }); } catch {}
             return res.json({
               jsonrpc: '2.0',
               id: body.id,
