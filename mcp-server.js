@@ -18,7 +18,7 @@ const app = express();
 // Configure trust proxy BEFORE rate limiting middleware
 // Set to false for local development (no proxy)
 // For production behind a proxy, use: 1, 'loopback', or specific IP ranges
-app.set('trust proxy', false);
+app.set('trust proxy', true);
 
 import rateLimit from 'express-rate-limit';
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
