@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WeatherTrax Planning</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 20px;
+      max-width: 800px;
+      margin: 0 auto;
+      line-height: 1.6;
+      color: #333;
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 8px;
+      color: #1a1a1a;
+    }
+
+    p {
+      margin-bottom: 20px;
+      color: #666;
+    }
+
+    .input-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 500;
+      color: #333;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #0066cc;
+    }
+
+    button {
+      background-color: #0066cc;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: #0052a3;
+    }
+
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+
+    #result {
+      margin-top: 24px;
+      padding: 16px;
+      background-color: #f8f9fa;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      display: none;
+    }
+
+    #result.visible {
+      display: block;
+    }
+
+    #result h2 {
+      font-size: 16px;
+      margin-bottom: 12px;
+      color: #1a1a1a;
+    }
+
+    pre {
+      background-color: #ffffff;
+      border: 1px solid #e1e4e8;
+      border-radius: 4px;
+      padding: 12px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .error {
+      color: #d73a49;
+      background-color: #ffeef0;
+      border-color: #fdaeb7;
+    }
+
+    .warning {
+      background-color: #fff8c5;
+      border: 1px solid #faebcc;
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      color: #8a6d3b;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>WeatherTrax Planning</h1>
+  <p>Get 7-day weather forecasts for planning construction, outdoor work, or events.</p>
+
+  <!-- Warning for non-ChatGPT environments -->
+  <div id="env-warning" class="warning" style="display: none;">
+    Warning: This UI is designed for ChatGPT Apps. The window.openai API is not available in this environment.
+    Tool calls will be simulated for testing purposes.
+  </div>
+
+  <div class="input-group">
+    <label for="location">Location</label>
+    <input
+      type="text"
+      id="location"
+      placeholder="e.g., Boca Raton, Miami, or 33432"
+      value=""
+    />
+  </div>
+
+  <button id="fetchBtn" onclick="fetchWeather()">Get Weather Planning Data</button>
+
+  <div id="result">
+    <h2>Weather Data</h2>
+    <pre id="output"></pre>
+  </div>
+
+  <script>
+    // ChatGPT Apps UI Integration
+    // This script uses window.openai.callTool and window.openai.toolOutput
+    // to interact with the MCP server when embedded in ChatGPT.
+
+    // Check if running in ChatGPT App environment
+    const isChatGPTApp = typeof window.openai !== 'undefined';
+
+    // Show warning if not in ChatGPT environment
+    if (!isChatGPTApp) {
+      document.getElementById('env-warning').style.display = 'block';
+    }
+
+    // On initial load, check for existing tool output from ChatGPT
+    window.addEventListener('DOMContentLoaded', () => {
+      if (isChatGPTApp && window.openai.toolOutput) {
+        try {
+          const output = window.openai.toolOutput;
+          displayResult(output, false);
+
+          // Pre-fill location if available in the output
+          if (output.location) {
+            document.getElementById('location').value = output.location;
+          }
+        } catch (e) {
+          console.error('Error loading initial tool output:', e);
+        }
+      }
+    });
+
+    async function fetchWeather() {
+      const location = document.getElementById('location').value.trim();
+      const resultDiv = document.getElementById('result');
+      const outputPre = document.getElementById('output');
+      const fetchBtn = document.getElementById('fetchBtn');
+
+      // Validate input
+      if (!location) {
+        displayResult({ error: 'Please enter a location' }, true);
+        return;
+      }
+
+      // Disable button during fetch
+      fetchBtn.disabled = true;
+      fetchBtn.textContent = 'Loading...';
+
+      try {
+        let result;
+
+        if (isChatGPTApp) {
+          // ChatGPT App environment: use window.openai.callTool
+          result = await window.openai.callTool({
+            name: 'weatherPlanningTool',
+            parameters: {
+              location: location,
+              context: 'planning',
+              timeframe: 'next 7 days'
+            }
+          });
+        } else {
+          // Fallback for testing outside ChatGPT: direct HTTP call
+          const response = await fetch('/tools/weatherPlanningTool', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              location: location,
+              context: 'planning',
+              timeframe: 'next 7 days'
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          result = await response.json();
+        }
+
+        // Display the result
+        displayResult(result, false);
+
+      } catch (error) {
+        console.error('Error fetching weather:', error);
+        displayResult({
+          error: error.message || 'Failed to fetch weather data',
+          details: error.toString()
+        }, true);
+      } finally {
+        // Re-enable button
+        fetchBtn.disabled = false;
+        fetchBtn.textContent = 'Get Weather Planning Data';
+      }
+    }
+
+    function displayResult(data, isError = false) {
+      const resultDiv = document.getElementById('result');
+      const outputPre = document.getElementById('output');
+
+      // Format JSON with nice indentation
+      outputPre.textContent = JSON.stringify(data, null, 2);
+
+      // Apply error styling if needed
+      if (isError) {
+        outputPre.classList.add('error');
+      } else {
+        outputPre.classList.remove('error');
+      }
+
+      // Show result container
+      resultDiv.classList.add('visible');
+    }
+
+    // Allow Enter key to submit
+    document.getElementById('location').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        fetchWeather();
+      }
+    });
+  </script>
+</body>
+</html>

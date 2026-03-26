@@ -63,7 +63,17 @@ export const weatherPlanningTool = new Tool({
       };
 
       console.log('[WeatherPlanningTool] Result:', enrichedResult);
-      return enrichedResult;
+
+      // Return ChatGPT Apps SDK-compatible envelope
+      return {
+        content: [
+          {
+            type: "text",
+            text: "7-day weather forecast retrieved successfully."
+          }
+        ],
+        structuredContent: enrichedResult
+      };
     } catch (err) {
       console.error('[WeatherPlanningTool] Error:', err);
       throw err;

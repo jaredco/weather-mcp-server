@@ -2,7 +2,9 @@
   "name": "mcp-railway-server",
   "type": "module",
   "scripts": {
-    "start": "node mcp-server.js"
+    "start": "node mcp-server.js",
+    "test": "node quick-test.js",
+    "test:full": "node test-suite.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
