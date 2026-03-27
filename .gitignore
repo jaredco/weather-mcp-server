@@ -36,3 +36,4 @@ __pycache__/
 build/
 dist/
 test.pyapi-keys.json
+.mcpregistry_github_token

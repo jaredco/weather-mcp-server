@@ -1,48 +1,66 @@
 # 🌦 WeatherTrax MCP Server
 
-Fast, reliable weather data for Claude and other MCP clients. Get current conditions and multi-day forecasts for any location worldwide.
+Run instantly:
 
+```bash
 npx @jaredco/weather-mcp-server
+```
 
-**Production Server:** [`https://mcp-weathertrax.jaredco.com`](https://mcp-weathertrax.jaredco.com)
+Fast, reliable weather data for **Claude and other MCP clients**.  
+Get current conditions and multi-day forecasts for any location worldwide.
+
+🌐 **Remote MCP Server (no install required)**  
+https://mcp-weathertrax.jaredco.com
+
+---
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--03--26-blue)](https://modelcontextprotocol.io/)
 [![Tests Passing](https://img.shields.io/badge/tests-67%2F67%20passing-brightgreen)]()
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-Registered-blue)](https://registry.modelcontextprotocol.io/v0.1/servers?search=jaredco)
 
 ---
 
-## 🚀 Features
+# ⚡ 10-Second Demo
 
-- **Real-time Weather Data** - Current conditions, temperature, humidity, wind speed, and more
-- **Multi-day Forecasts** - Up to 14-day forecasts with detailed daily breakdowns
-- **Planning Tool** - Specialized 7-day forecasts for construction, events, and outdoor work
-- **Location Flexibility** - City names, ZIP codes, coordinates, or place names
-- **Token-Efficient** - Compact JSON responses optimized for LLM usage
-- **Production-Ready** - Rate-limited, monitored, and deployed on Railway
-- **MCP Compliant** - Full JSON-RPC 2.0 support with proper tool annotations
-- **No Authentication** - Public API, no API keys required
+Ask Claude:
 
----
+> **“What’s the weather in Miami tomorrow?”**
 
-## 📖 Table of Contents
+Claude will call the MCP weather server and return a forecast instantly.
 
-- [Quick Start](#-quick-start)
-- [Usage Examples](#-usage-examples)
-- [Tools Available](#-tools-available)
-- [API Documentation](#-api-documentation)
-- [MCP Integration](#-mcp-integration)
-- [Testing](#-testing)
-- [Privacy & Support](#-privacy--support)
-- [Development](#-development)
+Example API call:
+
+```bash
+curl -X POST https://mcp-weathertrax.jaredco.com/tools/weatherTool \
+  -H "Content-Type: application/json" \
+  -d '{"location":"Miami","query_type":"current"}'
+```
 
 ---
 
-## ⚡ Quick Start
+# 🚀 Features
 
-### Using with Claude Desktop
+- **Real-time Weather Data** – Current conditions, temperature, humidity, wind speed
+- **Multi-day Forecasts** – Up to 14-day forecasts
+- **Planning Tool** – 7-day forecasts optimized for events or construction
+- **Flexible Locations** – City names, ZIP codes, or coordinates
+- **Token-Efficient** – Compact responses optimized for LLM usage
+- **Production-Ready** – Rate limiting and monitoring
+- **Public API** – No API keys required
+- **MCP Compliant** – Full JSON-RPC 2.0 support
 
-Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+---
+
+# ⚡ Quick Start
+
+## Claude Desktop
+
+Add this to your Claude Desktop configuration:
+
+```
+~/Library/Application Support/Claude/claude_desktop_config.json
+```
 
 ```json
 {
@@ -54,25 +72,36 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
 }
 ```
 
-### Using with Direct HTTP Calls
+Restart Claude Desktop.
+
+You can now ask:
+
+```
+What’s the weather in New York this weekend?
+```
+
+---
+
+# 🌐 Direct API Usage
+
+### Health Check
 
 ```bash
-# Check server health
 curl https://mcp-weathertrax.jaredco.com/healthz
+```
 
-# Get server manifest
+### MCP Manifest
+
+```bash
 curl https://mcp-weathertrax.jaredco.com/.well-known/mcp/manifest
 ```
 
 ---
 
-## 💡 Usage Examples
+# 💡 Usage Examples
 
-### Example 1: Current Weather Query
+## Current Weather
 
-Get current weather conditions for any location:
-
-**Request:**
 ```bash
 curl -X POST https://mcp-weathertrax.jaredco.com/tools/weatherTool \
   -H "Content-Type: application/json" \
@@ -82,7 +111,8 @@ curl -X POST https://mcp-weathertrax.jaredco.com/tools/weatherTool \
   }'
 ```
 
-**Response:**
+Example response:
+
 ```json
 {
   "summary": "It is currently 54°F and Clear in San Francisco.",
@@ -90,26 +120,14 @@ curl -X POST https://mcp-weathertrax.jaredco.com/tools/weatherTool \
   "temp_low": 54,
   "condition": "Clear",
   "wind": "5 mph W",
-  "feels_like": 54,
-  "humidity": 65,
-  "uv_index": 0,
-  "visibility": 10,
-  "pressure": 1013,
-  "cloud_cover": 0,
-  "units": {
-    "temperature": "°F",
-    "distance": "miles",
-    "speed": "mph",
-    "pressure": "mb"
-  }
+  "humidity": 65
 }
 ```
 
-### Example 2: Multi-Day Forecast
+---
 
-Retrieve a detailed forecast for the next several days:
+## Multi-Day Forecast
 
-**Request:**
 ```bash
 curl -X POST https://mcp-weathertrax.jaredco.com/tools/weatherTool \
   -H "Content-Type: application/json" \
@@ -120,437 +138,159 @@ curl -X POST https://mcp-weathertrax.jaredco.com/tools/weatherTool \
   }'
 ```
 
-**Response:**
+---
+
+# 🛠 Available Tools
+
+### weatherTool
+
+Retrieve current weather or forecasts.
+
+Input:
+
 ```json
 {
-  "forecast": [
-    {
-      "date": "2026-03-26",
-      "high": 79,
-      "low": 42,
-      "condition": "Sunny",
-      "precip_chance": 0,
-      "wind": "18 mph SW",
-      "sunrise": "06:49 AM",
-      "sunset": "07:15 PM"
-    },
-    {
-      "date": "2026-03-27",
-      "high": 59,
-      "low": 39,
-      "condition": "Moderate rain",
-      "precip_chance": 0.88,
-      "wind": "19 mph WNW",
-      "sunrise": "06:48 AM",
-      "sunset": "07:16 PM"
-    },
-    {
-      "date": "2026-03-28",
-      "high": 41,
-      "low": 28,
-      "condition": "Sunny",
-      "precip_chance": 0,
-      "wind": "17 mph W",
-      "sunrise": "06:46 AM",
-      "sunset": "07:17 PM"
-    }
-  ]
+  "location": "city name or coordinates",
+  "query_type": "current | multi_day",
+  "num_days": "optional forecast length"
 }
 ```
 
-### Example 3: Weather Planning Tool
+---
 
-Get a 7-day forecast optimized for planning outdoor activities, construction work, or events:
+### weatherPlanningTool
 
-**Request:**
-```bash
-curl -X POST https://mcp-weathertrax.jaredco.com/tools/weatherPlanningTool \
-  -H "Content-Type: application/json" \
-  -d '{
-    "location": "Miami, FL",
-    "context": "outdoor event planning",
-    "timeframe": "next week"
-  }'
-```
+7-day planning forecast for outdoor work or events.
 
-**Response:**
+Input:
+
 ```json
 {
-  "forecast": [
-    {
-      "date": "2026-03-26",
-      "high": 82,
-      "low": 73,
-      "condition": "Sunny",
-      "precip_chance": 0,
-      "wind": "12 mph E",
-      "sunrise": "07:18 AM",
-      "sunset": "07:35 PM"
-    },
-    {
-      "date": "2026-03-27",
-      "high": 77,
-      "low": 72,
-      "condition": "Partly Cloudy",
-      "precip_chance": 0,
-      "wind": "12 mph E",
-      "sunrise": "07:17 AM",
-      "sunset": "07:35 PM"
-    }
-    // ... 5 more days
-  ],
-  "provenance": {
-    "source": "World Weather Online",
-    "generated_at": "2026-03-26T09:18:36.704Z"
-  }
+  "location": "city or place",
+  "context": "construction | travel | event",
+  "timeframe": "optional timeframe hint"
 }
 ```
 
-### Example 4: MCP Protocol - JSON-RPC Call
+---
 
-Using the MCP JSON-RPC protocol to call tools:
+# 🔗 MCP Protocol Integration
 
-**Request:**
+This server supports the full MCP JSON-RPC protocol.
+
+Example tool call:
+
 ```bash
 curl -X POST https://mcp-weathertrax.jaredco.com/mcp \
   -H "Content-Type: application/json" \
   -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "tools/call",
-    "params": {
-      "name": "weatherTool",
-      "arguments": {
-        "location": "London, UK",
-        "query_type": "current"
+    "jsonrpc":"2.0",
+    "id":1,
+    "method":"tools/call",
+    "params":{
+      "name":"weatherTool",
+      "arguments":{
+        "location":"London",
+        "query_type":"current"
       }
     }
   }'
 ```
 
-**Response:**
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": {
-    "toolUseId": 1,
-    "isFinal": true,
-    "output": {
-      "summary": "It is currently 48°F and Cloudy in London.",
-      "temp_high": 48,
-      "temp_low": 48,
-      "condition": "Cloudy",
-      "wind": "10 mph NW",
-      "feels_like": 45,
-      "humidity": 78,
-      "uv_index": 1,
-      "visibility": 10,
-      "pressure": 1015,
-      "cloud_cover": 75
-    }
-  }
-}
-```
-
 ---
 
-## 🛠 Tools Available
+# 🧪 Testing
 
-### 1. **weatherTool** (Current & Forecast)
-
-Retrieve real-time weather conditions or multi-day forecasts.
-
-**Input Schema:**
-```json
-{
-  "location": "string (required) - City name, ZIP, or coordinates",
-  "query_type": "string (required) - 'current' or 'multi_day'",
-  "num_days": "number (optional) - For multi_day, number of days (1-14, default: 3)"
-}
-```
-
-**Annotations:**
-- `readOnlyHint: true` - No destructive operations
-- `category: "Information"`
-- `requiresConfirmation: false`
-
-### 2. **weatherPlanningTool** (7-Day Planning)
-
-Specialized tool for planning queries including construction scheduling, outdoor work, event planning, or travel preparation.
-
-**Input Schema:**
-```json
-{
-  "location": "string (required) - City name, ZIP, or place name",
-  "context": "string (optional) - Planning context (e.g., 'construction', 'outdoor event')",
-  "timeframe": "string (optional) - Timeframe hint (e.g., 'next week', 'Thursday')"
-}
-```
-
-**Annotations:**
-- `readOnlyHint: true` - No destructive operations
-- `category: "Information"`
-- `requiresConfirmation: false`
-
----
-
-## 📚 API Documentation
-
-### Base URL
-```
-https://mcp-weathertrax.jaredco.com
-```
-
-### Endpoints
-
-#### Health Check
-```
-GET /healthz
-```
-Returns server health and version information.
-
-#### MCP Manifest
-```
-GET /.well-known/mcp/manifest
-```
-Returns the MCP protocol manifest with tool definitions.
-
-#### Privacy Policy
-```
-GET /privacy
-```
-Returns the server's privacy policy.
-
-#### Direct Tool Calls
-```
-POST /tools/weatherTool
-POST /tools/weatherPlanningTool
-```
-Direct HTTP endpoints for tool execution (no JSON-RPC wrapper).
-
-#### MCP JSON-RPC
-```
-POST /mcp
-POST /
-```
-Full MCP protocol support via JSON-RPC 2.0.
-
-**Supported Methods:**
-- `initialize` - MCP handshake
-- `tools/list` - Discover available tools
-- `tools/call` - Execute a tool
-
-### Rate Limits
-
-- **120 requests per minute** per IP address
-- Rate limit headers included in responses
-
-### Error Handling
-
-All errors follow this structure:
-
-```json
-{
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human-readable error message",
-    "hint": "Suggestion for fixing the error",
-    "retry_after": null
-  }
-}
-```
-
-**Common Error Codes:**
-- `INVALID_INPUT` - Missing or invalid parameters
-- `INTERNAL_ERROR` - Server error
-- `-32601` - Method not found (JSON-RPC)
-- `-32602` - Invalid params (JSON-RPC)
-
----
-
-## 🔗 MCP Integration
-
-### Protocol Compliance
-
-- **MCP Version:** 2025-03-26
-- **Transport:** HTTP with streaming support
-- **Authentication:** None required (public API)
-- **CORS:** Enabled for all origins
-
-### Discovery
-
-Tools are automatically discovered via the manifest endpoint:
+Run locally:
 
 ```bash
-curl https://mcp-weathertrax.jaredco.com/.well-known/mcp/manifest
-```
-
-### Integration Examples
-
-- **Claude Desktop** - Add to `claude_desktop_config.json`
-- **n8n Workflows** - Use HTTP Request nodes or Langchain Agent
-- **Custom Applications** - Standard HTTP/JSON-RPC calls
-
-[See n8n example workflow →](./weathertrax-mcp-demo/README.md)
-
----
-
-## 🧪 Testing
-
-### Automated Tests
-
-The server includes comprehensive test coverage:
-
-```bash
-# Install dependencies
 npm install
-
-# Start the server
 npm start
+```
 
-# Run quick tests (8 core tests)
+Quick tests:
+
+```bash
 npm test
+```
 
-# Run full test suite (67 tests)
+Full test suite:
+
+```bash
 npm run test:full
 ```
 
-**Test Coverage:**
-- ✅ Legacy compatibility (n8n integration)
-- ✅ MCP JSON-RPC protocol
-- ✅ Origin validation
-- ✅ Privacy policy & manifest
-- ✅ Error handling
-- ✅ Health & monitoring
+Current results:
 
-**Latest Results:** 67/67 tests passing ✅
-
-### Manual Testing
-
-```bash
-# Test current weather
-curl -X POST https://mcp-weathertrax.jaredco.com/tools/weatherTool \
-  -H "Content-Type: application/json" \
-  -d '{"location": "Tokyo", "query_type": "current"}'
-
-# Test forecast
-curl -X POST https://mcp-weathertrax.jaredco.com/tools/weatherTool \
-  -H "Content-Type: application/json" \
-  -d '{"location": "Paris", "query_type": "multi_day", "num_days": 5}'
-
-# Test MCP protocol
-curl -X POST https://mcp-weathertrax.jaredco.com/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+67 / 67 tests passing
 ```
 
 ---
 
-## 🔒 Privacy & Support
+# 🔒 Privacy
 
-### Privacy Policy
+Privacy policy available at:
 
-We take your privacy seriously. Our privacy policy is available at:
-- **URL:** https://mcp-weathertrax.jaredco.com/privacy
+https://mcp-weathertrax.jaredco.com/privacy
 
-**Key Points:**
-- Request metadata logged for 14 days (for abuse prevention)
-- No persistent storage of location queries
+Key points:
+
+- Request metadata logged for abuse prevention
+- No persistent storage of weather queries
 - No cookies or tracking
-- TLS encryption enforced
-
-### Support
-
-- **GitHub Issues:** https://github.com/jaredco/weather-mcp-server/issues
-- **Email:** support@jaredco.com
-
-### Security
-
-- HTTPS/TLS enforced
-- Rate limiting active
-- Input validation on all parameters
-- Regular security updates
+- HTTPS enforced
 
 ---
 
-## 🛠 Development
+# 🛠 Development
 
-### Running Locally
+Clone the repo:
 
 ```bash
-# Clone repository
 git clone https://github.com/jaredco/weather-mcp-server.git
 cd weather-mcp-server
-
-# Install dependencies
 npm install
-
-# Set up environment
-cp .env.example .env
-# Add your WEATHER_API_KEY to .env
-
-# Start server
 npm start
 ```
 
-Server runs on `http://localhost:3000`
-
-### Environment Variables
-
-```bash
-PORT=3000                    # Server port
-WEATHER_API_KEY=your_key     # World Weather Online API key
-NODE_ENV=production          # Environment
-```
-
-### Project Structure
+Server runs locally at:
 
 ```
-weather-mcp-server/
-├── mcp-server.js           # Main server
-├── tools/
-│   ├── weatherTool.js      # Current & forecast tool
-│   └── weatherPlanningTool.js  # Planning tool
-├── utils/
-│   └── logger.js           # Logging utilities
-├── test-suite.js           # Comprehensive tests
-├── quick-test.js           # Quick smoke tests
-└── weathertrax-mcp-demo/   # n8n workflow examples
+http://localhost:3000
 ```
-
-### Technology Stack
-
-- **Runtime:** Node.js 18+
-- **Framework:** Express 5
-- **MCP SDK:** @modelcontextprotocol/sdk
-- **Weather API:** World Weather Online
-- **Hosting:** Railway
 
 ---
 
-## 📄 License
+# 📦 Technology Stack
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
----
-
-## 🌟 Acknowledgments
-
-- Built on the [Model Context Protocol](https://modelcontextprotocol.io/) by Anthropic
-- Weather data provided by [World Weather Online](https://www.worldweatheronline.com/)
-- Hosted on [Railway](https://railway.app/)
+- Node.js
+- Express 5
+- @modelcontextprotocol/sdk
+- World Weather Online API
+- Railway hosting
 
 ---
 
-## 📊 Status
+# 📄 License
 
-- **Server Status:** 🟢 Production
-- **Uptime:** Monitored via Railway
-- **API Version:** 1.0.0
-- **MCP Protocol:** 2025-03-26
+MIT License.
 
-**Last Updated:** March 26, 2026
+---
+
+# 🌟 Acknowledgments
+
+Built using the **Model Context Protocol** by Anthropic.
+
+Weather data provided by **World Weather Online**.
+
+---
+
+# 📊 Status
+
+Server: **Production**  
+API Version: **1.0.1**  
+MCP Protocol: **2025-03-26**
 
 ---
 
