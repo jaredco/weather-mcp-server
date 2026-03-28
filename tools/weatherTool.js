@@ -48,7 +48,7 @@ async function fetchWeatherData({ location, date, query_type, num_days = 3 }) {
     q: location,
     format: 'json',
     num_of_days: query_type === 'multi_day' ? num_days.toString() : '1',
-    tp: '24',
+    tp: input.tp ? input.tp.toString() : '24',
     includeLocation: 'yes',
     fx: 'yes',
     showlocaltime: 'yes'
@@ -171,6 +171,11 @@ export const weatherTool = new Tool({
         minimum: 1,
         maximum: 14,
         description: 'Number of days (only used with "multi_day")'
+      },
+       tp: {
+        type: 'integer',
+        enum: [1, 3, 6, 12, 24],
+        description: 'Forecast time interval in hours. 3 = 3-hourly, 24 = daily average (default).'
       }
     },
     required: ['location', 'query_type']
