@@ -48,7 +48,7 @@ async function fetchWeatherData({ location, date, query_type, num_days = 3, tp =
     q: location,
     format: 'json',
     num_of_days: query_type === 'multi_day' ? num_days.toString() : '1',
-    tp: input.tp = tp.toString() ,
+    tp: tp.toString() ,
     includeLocation: 'yes',
     fx: 'yes',
     showlocaltime: 'yes'
