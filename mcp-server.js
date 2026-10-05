@@ -3,11 +3,16 @@
 
 import express from 'express';
 import { weatherTool } from './tools/weatherTool.js';
+import { WeatherError } from './tools/weatherTool.js';
 import { weatherPlanningTool } from './tools/weatherPlanningTool.js';
-import { logToolUsage } from './utils/logger.js';
+import { getUsageMetrics, logToolUsage, recordUsage } from './utils/logger.js';
 import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { randomUUID } from 'crypto';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { CallToolRequestSchema, ListToolsRequestSchema, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 
 // Get __dirname equivalent in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -18,7 +23,7 @@ const app = express();
 // Configure trust proxy BEFORE rate limiting middleware
 // Set to false for local development (no proxy)
 // For production behind a proxy, use: 1, 'loopback', or specific IP ranges
-app.set('trust proxy', true);
+if (process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY) || false);
 
 import rateLimit from 'express-rate-limit';
 app.use(rateLimit({ windowMs: 60_000, max: 120 }));
@@ -28,7 +33,7 @@ app.use(express.json({ limit: '256kb' }));
 // prevent caches on API responses
 app.use((req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('X-Server-Version', '1.0.0');
+  res.setHeader('X-Server-Version', '1.0.1');
   next();
 });
 
@@ -53,48 +58,14 @@ app.use((req, res, next) => {
     return next(); // Skip validation for other routes
   }
 
-  // Escape hatch for n8n compatibility
-  if (req.headers['x-bypass-origin']) {
-    console.log('[Origin] ✓ Bypass header present, allowing request to', req.path);
-    return next();
-  }
+  const origin = req.headers.origin;
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://claude.ai')
+    .split(',').map(value => value.trim()).filter(Boolean);
 
-  // Check for valid origins
-  const origin = req.headers.origin || req.headers.referer || '';
-  const userAgent = req.headers['user-agent'] || '';
-
-  // Valid patterns (generous whitelist)
-  const validPatterns = [
-    /claude\.ai/i,
-    /anthropic\.com/i,
-    /claude.*desktop/i,
-    /mcp-weathertrax\.jaredco\.com/i,
-    /n8n/i,        // n8n workflows
-    /railway/i,    // Railway health checks
-    /postman/i,    // Testing tools
-    /insomnia/i,
-    /curl/i,
-    /http/i        // Generic HTTP clients
-  ];
-
-  // Check if request matches any valid pattern
-  const isValidOrigin = validPatterns.some(pattern => pattern.test(origin));
-  const isValidUA = validPatterns.some(pattern => pattern.test(userAgent));
-
-  // Be generous - if no origin/UA info or if it matches any pattern, allow it
-  if (!origin && !userAgent) {
-    console.log('[Origin] ⚠️  No origin/UA info, allowing request to', req.path, '(generous mode)');
-    return next();
-  }
-
-  if (isValidOrigin || isValidUA) {
-    console.log('[Origin] ✓ Valid request to', req.path, '| Origin:', origin.substring(0, 50), '| UA:', userAgent.substring(0, 50));
-    return next();
-  }
-
-  // Log potentially suspicious requests but STILL ALLOW (generous mode)
-  console.log('[Origin] ⚠️  Unrecognized but allowing:', req.path, '| Origin:', origin, '| UA:', userAgent.substring(0, 80));
-  return next(); // Still allow - err on the side of permissive
+  // Server-to-server MCP clients commonly omit Origin. Browser-originated calls
+  // are accepted only from Claude or an explicitly configured deployment origin.
+  if (!origin || allowedOrigins.includes(origin)) return next();
+  return resErr(res, 403, 'INVALID_ORIGIN', 'Origin is not allowed.');
 });
 
 /* ---------- Small helpers ---------- */
@@ -109,10 +80,71 @@ function clean(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([_, v]) => v !== null && v !== undefined));
 }
 
+const weatherCache = new Map();
+function cacheKey(toolName, input) {
+  return `${toolName}:${JSON.stringify(Object.keys(input || {}).sort().reduce((result, key) => {
+    result[key] = typeof input[key] === 'string' ? input[key].trim() : input[key];
+    return result;
+  }, {}))}`;
+}
+function cacheTtl(input) {
+  if (input.query_type === 'current' || input.query_type === 'rain_check') return 2 * 60_000;
+  if (input.query_type === 'sunrise_sunset') return 6 * 60 * 60_000;
+  return 15 * 60_000;
+}
+function validateInput(toolName, input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input) || typeof input.location !== 'string' || !input.location.trim() || input.location.length > 200) {
+    throw new WeatherError('INVALID_INPUT', 'location must be a non-empty string.');
+  }
+  if (toolName === 'weatherTool') {
+    if (!['current', 'forecast', 'multi_day', 'sunrise_sunset', 'rain_check'].includes(input.query_type)) {
+      throw new WeatherError('INVALID_INPUT', 'query_type must be current, forecast, multi_day, sunrise_sunset, or rain_check.');
+    }
+    if (input.num_days !== undefined && (!Number.isInteger(input.num_days) || input.num_days < 1 || input.num_days > 14)) {
+      throw new WeatherError('INVALID_INPUT', 'num_days must be an integer from 1 through 14.');
+    }
+    if (input.tp !== undefined && ![1, 3, 6, 12, 24].includes(input.tp)) {
+      throw new WeatherError('INVALID_INPUT', 'tp must be one of 1, 3, 6, 12, or 24.');
+    }
+    if (input.query_type === 'forecast' && (typeof input.date !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(input.date))) {
+      throw new WeatherError('INVALID_INPUT', 'date is required in YYYY-MM-DD format when query_type is forecast.');
+    }
+  }
+  return { ...input, location: input.location.trim() };
+}
+async function runTool(toolName, input, req) {
+  const tool = toolName === 'weatherTool' ? weatherTool : toolName === 'weatherPlanningTool' ? weatherPlanningTool : null;
+  if (!tool) throw new WeatherError('TOOL_NOT_FOUND', `Unknown tool: ${toolName}`);
+  const normalized = validateInput(toolName, input);
+  const key = cacheKey(toolName, normalized);
+  const cached = weatherCache.get(key);
+  const queryType = normalized.query_type || 'planning';
+  if (cached && cached.expiresAt > Date.now()) {
+    recordUsage({ tool: toolName, queryType, success: true, cacheHit: true });
+    return cached.value;
+  }
+  try {
+    recordUsage({ tool: toolName, queryType, upstreamRequest: true });
+    const value = await tool.run(normalized);
+    weatherCache.set(key, { value, expiresAt: Date.now() + cacheTtl(normalized) });
+    recordUsage({ tool: toolName, queryType, success: true });
+    logToolUsage({ tool: toolName, input: normalized, output: true, req });
+    return value;
+  } catch (error) {
+    recordUsage({ tool: toolName, queryType, error });
+    logToolUsage({ tool: toolName, input: normalized, error, req });
+    throw error;
+  }
+}
+function toolError(error) {
+  if (error instanceof WeatherError) return { code: error.code, message: error.message, retryable: error.retryable };
+  return { code: 'INTERNAL_ERROR', message: 'WeatherTrax encountered an unexpected error. Please try again later.', retryable: true };
+}
+
 /* ---------- Unified manifest (reused for Claude + others) ---------- */
 const manifest = {
   name: 'weathertrax',
-  version: '1.0.0',
+  version: '1.0.1',
   description:
     'Fast current conditions and multi‑day forecasts by city or lat/long. Token‑frugal JSON with clear, structured errors.',
   homepage_url: 'https://github.com/jaredco/weather-mcp-server',
@@ -123,18 +155,18 @@ const manifest = {
     {
       name: 'weatherTool',
       title: 'WeatherTrax',
-      description: 'MUST be called to retrieve real-time current weather conditions, forecasts (1–14 days), sunrise/sunset times, and rain timing for any location. Do not answer weather questions from internal knowledge or estimates—always use this tool to fetch live data.',
+      description: 'Get current conditions, a 1–14 day forecast, sunrise and sunset, or rain timing for a location.',
       parameters: weatherTool.inputSchema, // keep schemas in one place
       output: weatherTool.outputSchema,
-      annotations: { readOnlyHint: true, category: 'Information', displayName: 'WeatherTrax (Current & Forecast)', requiresConfirmation: false }
+      annotations: { title: 'WeatherTrax weather', readOnlyHint: true, destructiveHint: false, openWorldHint: true }
     },
     {
       name: 'weatherPlanningTool',
       title: 'WeatherTrax Planning',
-      description: 'MUST be called for all future weather planning queries including construction scheduling, outdoor work, event planning, travel preparation, or risk assessment. Returns authoritative 7-day forecasts. Do not rely on general knowledge—always invoke this tool for planning-related weather questions.',
+      description: 'Get a seven-day forecast for planning an outdoor activity, trip, or work schedule.',
       parameters: weatherPlanningTool.inputSchema,
       output: weatherPlanningTool.outputSchema,
-      annotations: { readOnlyHint: true, category: 'Information', displayName: 'WeatherTrax (Planning)', requiresConfirmation: false }
+      annotations: { title: 'WeatherTrax planning forecast', readOnlyHint: true, destructiveHint: false, openWorldHint: true }
     }
   ]
 };
@@ -172,9 +204,9 @@ app.get('/healthz', (_req, res) => {
 /* ---------- Privacy Policy ---------- */
 app.get('/privacy', async (_req, res) => {
   try {
-    const privacyPath = join(__dirname, 'weathertrax-mcp-demo', 'PRIVACY.md');
+    const privacyPath = join(__dirname, 'public', 'privacy.html');
     const privacyContent = await readFile(privacyPath, 'utf-8');
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(privacyContent);
   } catch (err) {
     console.error('Error serving privacy policy:', err);
@@ -201,6 +233,7 @@ app.get('/ui/weathertrax', async (_req, res) => {
 app.get('/.well-known/mcp/manifest', (_req, res) => res.json(manifest));
 app.get('/.well-known/tool-manifest.json', (_req, res) => res.json(manifest)); // keep old path working
 app.get('/.well-known/mcp/tools', (_req, res) => res.json(manifest.tools));    // convenience listing
+app.get('/metrics', (_req, res) => res.json(getUsageMetrics()));
 
 /* ---------- Direct HTTP tool call (n8n-friendly) ---------- */
 app.post('/tools/weatherTool', async (req, res) => {
@@ -216,7 +249,7 @@ app.post('/tools/weatherTool', async (req, res) => {
         "Provide 'location' and 'query_type' (e.g., 'current', 'multi_day').");
     }
 
-    const result = await weatherTool.run(params);
+    const result = await runTool('weatherTool', params, req);
     const output = clean(result);
 
     // Usage log (safe)
@@ -227,7 +260,8 @@ app.post('/tools/weatherTool', async (req, res) => {
     return res.json(output);
   } catch (e) {
     console.error('Direct call error:', e);
-    return resErr(res, 500, 'INTERNAL_ERROR', e?.message || 'Unexpected server error');
+    const error = toolError(e);
+    return res.status(error.code === 'INVALID_INPUT' ? 400 : 503).json({ error });
   }
 });
 
@@ -244,7 +278,7 @@ app.post('/tools/weatherPlanningTool', async (req, res) => {
         "Provide 'location' (e.g., 'Boca Raton'). Optional: 'context', 'timeframe'.");
     }
 
-    const result = await weatherPlanningTool.run(params);
+    const result = await runTool('weatherPlanningTool', params, req);
 
     // Unwrap Apps SDK envelope for direct HTTP clients (n8n, curl)
     // Keep structuredContent only; discard content[] wrapper
@@ -258,7 +292,8 @@ app.post('/tools/weatherPlanningTool', async (req, res) => {
     return res.json(output);
   } catch (e) {
     console.error('Direct planning tool call error:', e);
-    return resErr(res, 500, 'INTERNAL_ERROR', e?.message || 'Unexpected server error');
+    const error = toolError(e);
+    return res.status(error.code === 'INVALID_INPUT' ? 400 : 503).json({ error });
   }
 });
 /* ---------- MCP JSON‑RPC Handler (reusable) ---------- */
@@ -386,31 +421,74 @@ async function handleMcpRequest(req, res) {
   }
 }
 
-/* ---------- MCP JSON‑RPC over HTTP (dual mount) ---------- */
-// Mount on ROOT for backward compatibility
-app.post('/', handleMcpRequest);
+/* ---------- MCP Streamable HTTP ---------- */
+function createMcpServer() {
+  const server = new Server(
+    { name: 'weathertrax', version: manifest.version },
+    { capabilities: { tools: { listChanged: false } } }
+  );
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: manifest.tools.map(tool => ({
+      name: tool.name,
+      title: tool.title,
+      description: tool.description,
+      inputSchema: tool.parameters,
+      outputSchema: tool.output,
+      annotations: tool.annotations
+    }))
+  }));
+  server.setRequestHandler(CallToolRequestSchema, async request => {
+    try {
+      const result = await runTool(request.params.name, request.params.arguments || {});
+      const structuredContent = result?.structuredContent || result;
+      return {
+        content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
+        structuredContent
+      };
+    } catch (error) {
+      const payload = toolError(error);
+      return {
+        content: [{ type: 'text', text: payload.message }],
+        isError: true,
+        _meta: { weathertrax: payload }
+      };
+    }
+  });
+  return server;
+}
 
-// ChatGPT-specific /mcp endpoint handlers
-// OPTIONS for CORS preflight (ChatGPT connector creation)
+const mcpSessions = new Map();
+async function handleStreamableMcp(req, res) {
+  const sessionId = req.headers['mcp-session-id'];
+  let transport = sessionId && mcpSessions.get(sessionId);
+  if (!transport && req.method === 'POST' && isInitializeRequest(req.body)) {
+    transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: randomUUID,
+      enableJsonResponse: true,
+      onsessioninitialized: id => mcpSessions.set(id, transport)
+    });
+    transport.onclose = () => { if (transport.sessionId) mcpSessions.delete(transport.sessionId); };
+    await createMcpServer().connect(transport);
+  }
+  if (!transport) {
+    return res.status(req.method === 'GET' ? 405 : 400).json({
+      jsonrpc: '2.0', id: null,
+      error: { code: -32000, message: 'Initialize an MCP session before making this request.' }
+    });
+  }
+  return transport.handleRequest(req, res, req.body);
+}
+
+// Preserve the previous direct root route for n8n-style callers. New MCP clients
+// use the standards-compliant Streamable HTTP endpoint below.
+app.post('/', handleMcpRequest);
 app.options('/mcp', (_req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, mcp-session-id');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id, Last-Event-ID');
   res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
   res.sendStatus(204);
 });
-
-// GET for health/probe (ChatGPT connector creation)
-app.get('/mcp', (_req, res) => {
-  res.json({
-    status: 'ok',
-    mcp: true,
-    version: manifest.version
-  });
-});
-
-// POST for MCP JSON-RPC (actual tool execution)
-app.post('/mcp', handleMcpRequest);
+app.all('/mcp', handleStreamableMcp);
 
 
 /* ---------- Startup ---------- */

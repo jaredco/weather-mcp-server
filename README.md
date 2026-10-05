@@ -1,22 +1,15 @@
 # 🌦 WeatherTrax MCP Server
 
-Run instantly:
-
-```bash
-npx @jaredco/weather-mcp-server
-```
-
 Fast, reliable weather data for **Claude and other MCP clients**.  
 Get current conditions and multi-day forecasts for any location worldwide.
 
 🌐 **Remote MCP Server (no install required)**  
-https://mcp-weathertrax.jaredco.com
+`https://mcp-weathertrax.jaredco.com/mcp`
 
 ---
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![MCP Protocol](https://img.shields.io/badge/MCP-2025--03--26-blue)](https://modelcontextprotocol.io/)
-[![Tests Passing](https://img.shields.io/badge/tests-67%2F67%20passing-brightgreen)]()
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-Registered-blue)](https://registry.modelcontextprotocol.io/v0.1/servers?search=jaredco)
 
 ---
@@ -54,25 +47,14 @@ curl -X POST https://mcp-weathertrax.jaredco.com/tools/weatherTool \
 
 # ⚡ Quick Start
 
-## Claude Desktop
+## Claude
 
-Add this to your Claude Desktop configuration:
+In Claude or Claude Desktop, open **Settings → Connectors → Add connector** and use:
 
 ```
-~/Library/Application Support/Claude/claude_desktop_config.json
+Name: WeatherTrax
+URL:  https://mcp-weathertrax.jaredco.com/mcp
 ```
-
-```json
-{
-  "mcpServers": {
-    "weathertrax": {
-      "url": "https://mcp-weathertrax.jaredco.com"
-    }
-  }
-}
-```
-
-Restart Claude Desktop.
 
 You can now ask:
 
@@ -183,6 +165,7 @@ Example tool call:
 ```bash
 curl -X POST https://mcp-weathertrax.jaredco.com/mcp \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -d '{
     "jsonrpc":"2.0",
     "id":1,
@@ -201,30 +184,39 @@ curl -X POST https://mcp-weathertrax.jaredco.com/mcp \
 
 # 🧪 Testing
 
-Run locally:
+Run locally in one terminal:
 
 ```bash
 npm install
 npm start
 ```
 
-Quick tests:
+In another terminal, run the protocol tests:
 
 ```bash
 npm test
 ```
 
-Full test suite:
+Release smoke suite:
 
 ```bash
 npm run test:full
 ```
 
-Current results:
+`npm run test:full` currently runs the same supported end-to-end smoke suite. The old pre-Streamable-HTTP regression harness remains available as `npm run test:legacy`; it is retained for reference and is not a release gate.
 
-```
-67 / 67 tests passing
-```
+## Deployment configuration
+
+Set these server-side environment variables; never commit them:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `WEATHER_API_KEY` | Yes | World Weather Online API key. |
+| `PORT` | No | HTTP listener port; defaults to `3000`. |
+| `TRUST_PROXY` | Production-dependent | Number of trusted reverse-proxy hops; set to `1` for a single known proxy. |
+| `ALLOWED_ORIGINS` | No | Comma-separated browser origins allowed to call MCP; defaults to `https://claude.ai`. |
+
+The service exposes aggregate, non-identifying operational counters at `/metrics`. Do not place this endpoint behind a public dashboard without adding appropriate access control.
 
 ---
 
@@ -236,8 +228,8 @@ https://mcp-weathertrax.jaredco.com/privacy
 
 Key points:
 
-- Request metadata logged for abuse prevention
-- No persistent storage of weather queries
+- Aggregate operational metrics only; locations and raw provider responses are not logged
+- Short-lived in-memory caching reduces duplicate provider requests
 - No cookies or tracking
 - HTTPS enforced
 

@@ -1,9 +1,16 @@
 import fetch from 'node-fetch';
-import { McpError, ErrorCode } from '../local-sdk/types/index.mjs';
-import { logToolUsage } from '../utils/logger.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+export class WeatherError extends Error {
+  constructor(code, message, { retryable = false } = {}) {
+    super(message);
+    this.name = 'WeatherError';
+    this.code = code;
+    this.retryable = retryable;
+  }
+}
 
 class Tool {
   constructor({ name, description, inputSchema, outputSchema, run }) {
@@ -15,34 +22,42 @@ class Tool {
   }
 }
 
-async function fetchWithRetry(url, retries = 1, delay = 1000) {
+async function fetchWithRetry(url, retries = 1, delay = 500) {
   for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: controller.signal });
       const text = await response.text();
-      console.log("[WeatherTool] Raw response:", text.slice(0, 300));
+      if (!response.ok) {
+        throw new WeatherError('UPSTREAM_UNAVAILABLE', 'Weather data is temporarily unavailable.', { retryable: response.status >= 500 });
+      }
       const data = JSON.parse(text);
       return data;
     } catch (err) {
-      console.warn(`[WeatherTool] Attempt ${attempt + 1} failed: ${err.message}`);
+      const normalized = err instanceof WeatherError
+        ? err
+        : new WeatherError('UPSTREAM_UNAVAILABLE', 'Weather data is temporarily unavailable.', { retryable: true });
       if (attempt < retries) {
         await new Promise(resolve => setTimeout(resolve, delay));
       } else {
-        throw new McpError(ErrorCode.SERVER_ERROR, 'Failed to fetch weather data (invalid JSON or bad URL)');
+        throw normalized;
       }
+    } finally {
+      clearTimeout(timeout);
     }
   }
 }
 
 async function fetchWeatherData({ location, date, query_type, num_days = 3, tp = 24 }) {
   if (!location || !query_type) {
-    throw new McpError(ErrorCode.BAD_REQUEST, 'Missing required parameter: location or query_type');
+    throw new WeatherError('INVALID_INPUT', 'location and query_type are required.');
   }
 
   const apiKey = process.env.WEATHER_API_KEY;
-  if (!apiKey) throw new McpError(ErrorCode.SERVER_ERROR, 'Missing API key');
+  if (!apiKey) throw new WeatherError('CONFIGURATION_ERROR', 'WeatherTrax is temporarily unavailable.');
 
-  const endpoint = 'http://api.worldweatheronline.com/premium/v1/weather.ashx';
+  const endpoint = 'https://api.worldweatheronline.com/premium/v1/weather.ashx';
   const params = new URLSearchParams({
     key: apiKey,
     q: location,
@@ -55,16 +70,21 @@ async function fetchWeatherData({ location, date, query_type, num_days = 3, tp =
   });
 
   const url = `${endpoint}?${params.toString()}`;
-  console.log("[WeatherTool] Fetching URL:", url);
-
   const data = await fetchWithRetry(url);
 
   if (!data || !data.data) {
-    throw new McpError(ErrorCode.SERVER_ERROR, 'Weather API error: Malformed response');
+    throw new WeatherError('MALFORMED_UPSTREAM_RESPONSE', 'Weather data is temporarily unavailable.', { retryable: true });
   }
 
   if (data.data.error) {
-    throw new McpError(ErrorCode.SERVER_ERROR, `Weather API error: ${data.data.error[0].msg}`);
+    const providerMessage = data.data.error[0]?.msg?.toLowerCase() || '';
+    if (/(quota|limit|exceed|subscription)/.test(providerMessage)) {
+      throw new WeatherError('QUOTA_EXHAUSTED', 'WeatherTrax has reached its current weather-data capacity. Please try again later.', { retryable: true });
+    }
+    if (/(invalid|not found|unable to find|no matching)/.test(providerMessage)) {
+      throw new WeatherError('INVALID_LOCATION', 'WeatherTrax could not find that location. Try a city, postal code, or coordinates.');
+    }
+    throw new WeatherError('UPSTREAM_UNAVAILABLE', 'Weather data is temporarily unavailable.', { retryable: true });
   }
 
   const dayData = data.data.weather;
@@ -99,7 +119,8 @@ async function fetchWeatherData({ location, date, query_type, num_days = 3, tp =
 
     case 'forecast':
       const day = dayData.find(d => d.date === date);
-      if (!day) throw new McpError(ErrorCode.BAD_REQUEST, `No forecast for ${date}`);
+      if (!date) throw new WeatherError('INVALID_INPUT', 'date is required when query_type is forecast.');
+      if (!day) throw new WeatherError('INVALID_INPUT', `No forecast is available for ${date}.`);
       return {
         summary: `${day.date}: High of ${day.maxtempF}°F, Low of ${day.mintempF}°F, ${day.hourly[0].weatherDesc[0].value}`,
         temp_high: parseFloat(day.maxtempF),
@@ -135,7 +156,7 @@ async function fetchWeatherData({ location, date, query_type, num_days = 3, tp =
 
     case 'sunrise_sunset':
       const astronomy = dayData?.[0]?.astronomy?.[0];
-      if (!astronomy) throw new McpError(ErrorCode.BAD_REQUEST, 'No astronomy data available');
+      if (!astronomy) throw new WeatherError('UPSTREAM_UNAVAILABLE', 'Astronomy data is temporarily unavailable.');
       return {
         sunrise: astronomy.sunrise,
         sunset: astronomy.sunset,
@@ -154,7 +175,7 @@ async function fetchWeatherData({ location, date, query_type, num_days = 3, tp =
       };
 
     default:
-      throw new McpError(ErrorCode.BAD_REQUEST, `Unsupported query_type: ${query_type}`);
+      throw new WeatherError('INVALID_INPUT', `Unsupported query_type: ${query_type}`);
   }
 }
 
@@ -240,14 +261,6 @@ export const weatherTool = new Tool({
     }
   },
   run: async (input) => {
-    console.log('[WeatherTool] Input:', input);
-    try {
-      const result = await fetchWeatherData(input);
-      console.log('[WeatherTool] Result:', result);
-      return result;
-    } catch (err) {
-      console.error(`[WeatherTool] Error for query_type "${input.query_type}":`, err);
-      throw new Error('Failed to fetch weather data.');
-    }
+    return fetchWeatherData(input);
   }
 });

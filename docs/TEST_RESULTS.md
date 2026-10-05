@@ -1,5 +1,7 @@
 # WeatherTrax MCP Server - Test Results
 
+> Historical record: this document predates the Streamable HTTP migration and its 67/67 count is not the current release result. Run `npm run test:full` against a running local server for the supported release smoke suite.
+
 ## ✅ All Critical Tests PASSED
 
 **Test Date:** March 25, 2026

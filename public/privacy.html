@@ -1,16 +1,22 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Privacy Policy</title>
+<title>WeatherTrax Privacy Policy</title>
 </head>
 <body>
 <h1>WeatherTrax MCP Privacy Policy</h1>
 
-<p>This MCP server processes weather queries and does not store user data.</p>
+<p>Last updated: October 5, 2026</p>
 
-<p>Request metadata may be logged temporarily for abuse prevention.</p>
+<p>WeatherTrax receives the location and weather-query parameters that Claude sends to retrieve weather data. We send those parameters to World Weather Online, our weather-data provider, only to fulfill the request.</p>
 
-<p>No cookies or tracking are used.</p>
+<p>WeatherTrax does not create user accounts, use cookies, or use advertising or cross-site tracking. We do not persist weather-query locations, raw tool arguments, provider responses, or client IP addresses in application logs.</p>
+
+<p>For reliability and capacity planning, the service records aggregate operational metrics: request timestamps, tool name, query category, success or failure, cache use, and upstream-provider request counts. These metrics do not identify individual users or retain locations.</p>
+
+<p>WeatherTrax retains only the short-lived in-memory cache required to reduce duplicate weather-provider requests: current conditions for up to two minutes, forecasts for up to fifteen minutes, and sunrise/sunset data for up to six hours. Cached data is not shared between users and is cleared when the service restarts.</p>
+
+<p>Questions or privacy requests can be sent through <a href="https://github.com/jaredco/weather-mcp-server/issues">WeatherTrax support</a>.</p>
 
 </body>
 </html>

@@ -10,6 +10,7 @@ console.log('╚═════════════════════�
 
 let passed = 0;
 let failed = 0;
+let mcpSessionId = null;
 
 async function test(name, fn) {
   process.stdout.write(`📋 ${name}... `);
@@ -38,7 +39,7 @@ async function runTests() {
     const res = await fetch(`${BASE_URL}/privacy`);
     const text = await res.text();
     if (!text.includes('WeatherTrax')) throw new Error('Privacy policy missing');
-    if (res.headers.get('content-type') !== 'text/plain; charset=utf-8') {
+    if (!res.headers.get('content-type')?.includes('text/html')) {
       throw new Error('Wrong content type');
     }
   });
@@ -58,25 +59,37 @@ async function runTests() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
         'User-Agent': 'Claude Desktop/1.0'
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
         id: 1,
-        method: 'initialize'
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'weathertrax-quick-test', version: '1.0.0' }
+        }
       })
     });
     const data = await res.json();
-    if (data.result?.serverInfo?.name !== 'weather-mcp-server') {
+    if (data.result?.serverInfo?.name !== 'weathertrax') {
       throw new Error('MCP initialize failed');
     }
+    mcpSessionId = res.headers.get('mcp-session-id');
+    if (!mcpSessionId) throw new Error('MCP session ID missing');
   });
 
   // Test 5: MCP Tools List
   await test('MCP Tools List', async () => {
     const res = await fetch(`${BASE_URL}/mcp`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
+        'Mcp-Session-Id': mcpSessionId
+      },
       body: JSON.stringify({
         jsonrpc: '2.0',
         id: 2,

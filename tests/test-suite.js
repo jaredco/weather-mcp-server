@@ -24,6 +24,12 @@ let failedTests = 0;
 
 // Test utilities
 function log(message, color = 'reset') {
+  // Network failures are caught by individual test cases. Count them so a
+  // disconnected or unavailable server can never produce a passing summary.
+  if (color === 'red' && message.trimStart().startsWith('Error:')) {
+    totalTests++;
+    failedTests++;
+  }
   console.log(`${COLORS[color]}${message}${COLORS.reset}`);
 }
 

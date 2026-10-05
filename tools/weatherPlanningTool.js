@@ -40,8 +40,6 @@ export const weatherPlanningTool = new Tool({
   outputSchema: weatherTool.outputSchema,
 
   run: async (input) => {
-    console.log('[WeatherPlanningTool] Input:', input);
-
     // Map planning-specific input to weatherTool parameters
     const weatherParams = {
       location: input.location,
@@ -62,8 +60,6 @@ export const weatherPlanningTool = new Tool({
         }
       };
 
-      console.log('[WeatherPlanningTool] Result:', enrichedResult);
-
       // Return ChatGPT Apps SDK-compatible envelope
       return {
         content: [
@@ -74,9 +70,6 @@ export const weatherPlanningTool = new Tool({
         ],
         structuredContent: enrichedResult
       };
-    } catch (err) {
-      console.error('[WeatherPlanningTool] Error:', err);
-      throw err;
-    }
+    } catch (err) { throw err; }
   }
 });
